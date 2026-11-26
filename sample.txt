@@ -1,0 +1,8 @@
+Huffman coding is a lossless data compression algorithm. The idea is to assign
+variable length codes to input characters. The lengths of the assigned codes
+are based on the frequencies of the characters. The most frequent character
+gets the smallest code and the least frequent character gets the largest code.
+
+This technique is used in many real world formats such as ZIP, GZIP, JPEG and
+MP3. In this project we build the Huffman tree using a priority queue, generate
+the binary codes, encode the file and decode it back to the original text.

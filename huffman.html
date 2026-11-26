@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Huffman Coding Compressor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#f2f6f8;--surface:#ffffff;--ink:#12263a;--muted:#5b7083;--line:#d5e0e8;
+  --accent:#1f6f9f;--b0:#0f8b8d;--b1:#d98324;--ok:#1d8a4f;--bad:#c0392b;
+  --font:'Sora',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1a24;--surface:#15273a;--ink:#e6eef5;--muted:#93a8ba;--line:#26405a;
+  --accent:#5bb0e0;--b0:#3cc4c6;--b1:#f0a653;--ok:#4cc382;--bad:#ff7b6b;color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0e1a24;--surface:#15273a;--ink:#e6eef5;--muted:#93a8ba;--line:#26405a;
+  --accent:#5bb0e0;--b0:#3cc4c6;--b1:#f0a653;--ok:#4cc382;--bad:#ff7b6b;color-scheme:dark;}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--font)}
+main{max-width:860px;margin:0 auto;padding:28px 18px 56px}
+h1{font-size:clamp(26px,6vw,38px);line-height:1.15;margin:0 0 6px;letter-spacing:-.02em}
+h2{font-size:18px;margin:0 0 12px}
+.sub{color:var(--muted);margin:0 0 22px;max-width:60ch}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+textarea{width:100%;min-height:110px;resize:vertical;font:15px/1.5 var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px}
+textarea:focus,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
+button,.file{font:600 14px var(--font);padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.file input{display:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.stat b{display:block;font-size:22px;font-family:var(--mono)}
+.stat span{color:var(--muted);font-size:13px}
+.bar{height:14px;border-radius:7px;background:var(--line);overflow:hidden;margin:14px 0 4px}
+.bar i{display:block;height:100%;background:var(--accent);width:100%;transition:width .4s}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.m{font-family:var(--mono)}
+.bits{font-family:var(--mono);font-size:15px;word-break:break-all;line-height:1.9}
+.bits span{padding:1px 3px;border-radius:4px;margin-right:2px}
+.bits .a{color:var(--b0);background:color-mix(in srgb,var(--b0) 14%,transparent)}
+.bits .b{color:var(--b1);background:color-mix(in srgb,var(--b1) 14%,transparent)}
+.note{color:var(--muted);font-size:13px;margin:8px 0 0}
+.ok{color:var(--ok);font-weight:600}.bad{color:var(--bad);font-weight:600}
+svg text{font-family:var(--mono);fill:var(--ink)}
+.cx td:first-child{font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>Huffman Coding Compressor</h1>
+<p class="sub">Type or load some text. The page counts each character, builds the Huffman tree, gives frequent characters shorter codes and shows how much space you save.</p>
+
+<section class="card">
+  <h2>Your text</h2>
+  <textarea id="inp" aria-label="Text to compress">this is an example of a huffman tree</textarea>
+  <div class="row">
+    <button class="primary" id="go">Compress</button>
+    <label class="file">Load .txt file<input type="file" id="file" accept=".txt,text/plain"></label>
+    <button id="sample">Use sample text</button>
+  </div>
+</section>
+
+<div id="out" hidden>
+<section class="card">
+  <h2>Size comparison</h2>
+  <div class="stats" id="stats"></div>
+  <div class="bar"><i id="bar"></i></div>
+  <p class="note" id="barnote"></p>
+</section>
+
+<section class="card">
+  <h2>Frequencies and codes</h2>
+  <div class="scroll"><table id="tbl"></table></div>
+</section>
+
+<section class="card">
+  <h2>Huffman tree</h2>
+  <p class="note" style="margin:0 0 8px">Left branch is 0, right branch is 1. Each leaf shows its character and count.</p>
+  <div class="scroll" id="tree"></div>
+</section>
+
+<section class="card">
+  <h2>Encoded bits</h2>
+  <div class="bits" id="bits"></div>
+  <p class="note" id="bitsnote"></p>
+  <h2 style="margin-top:16px">Decoding check</h2>
+  <p id="dec" style="margin:0"></p>
+</section>
+</div>
+
+<section class="card">
+  <h2>Complexity</h2>
+  <p class="note" style="margin:0 0 8px">n is the number of characters and k is the number of different characters (at most 256).</p>
+  <div class="scroll"><table class="cx">
+    <tr><th>Step</th><th>Time</th><th>Space</th></tr>
+    <tr><td>Count frequencies</td><td class="m">O(n)</td><td class="m">O(k)</td></tr>
+    <tr><td>Build tree with a min-heap</td><td class="m">O(k log k)</td><td class="m">O(k)</td></tr>
+    <tr><td>Generate codes</td><td class="m">O(k)</td><td class="m">O(k)</td></tr>
+    <tr><td>Encode and decode</td><td class="m">O(n)</td><td class="m">O(n)</td></tr>
+    <tr><td>Total</td><td class="m">O(n + k log k)</td><td class="m">O(n + k)</td></tr>
+  </table></div>
+</section>
+<p class="note">Shree Vashist · 2501730459 · CSE (AIML) G · DAA Capstone Project 3</p>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const SAMPLE = "Huffman coding is a lossless data compression algorithm. The most frequent character gets the smallest code and the least frequent character gets the largest code.";
+
+// Step 1: frequencies (over UTF-8 bytes, same as the Python version)
+function frequencies(bytes){ const f = new Map(); for (const b of bytes) f.set(b,(f.get(b)||0)+1); return f; }
+
+// Step 2: build tree. Ties broken by symbol so the tree is always the same.
+function buildTree(freq){
+  let nodes = [...freq].map(([s,f]) => ({s,f}));
+  if (!nodes.length) return null;
+  const key = n => n.s === undefined ? 256 : n.s;
+  while (nodes.length > 1){
+    nodes.sort((a,b) => a.f - b.f || key(a) - key(b));
+    const l = nodes.shift(), r = nodes.shift();
+    nodes.push({f:l.f+r.f, l, r});
+  }
+  return nodes[0];
+}
+
+// Step 3: codes (left = 0, right = 1)
+function makeCodes(root){
+  const codes = new Map();
+  if (!root) return codes;
+  if (!root.l){ codes.set(root.s,"0"); return codes; }
+  (function walk(n,p){ if(!n.l){codes.set(n.s,p);return;} walk(n.l,p+"0"); walk(n.r,p+"1"); })(root,"");
+  return codes;
+}
+
+// Step 5: decode by walking the tree
+function decode(bits, root, total){
+  const out = [];
+  if (!root) return new Uint8Array();
+  if (!root.l) return new Uint8Array(total).fill(root.s);
+  let n = root;
+  for (const c of bits){ n = c === "0" ? n.l : n.r; if(!n.l){ out.push(n.s); n = root; } }
+  return new Uint8Array(out);
+}
+
+const label = b => b===32 ? "␣ (space)" : b===10 ? "↵ (newline)" : b===9 ? "tab" : (b>32 && b<127) ? String.fromCharCode(b) : "0x"+b.toString(16).toUpperCase().padStart(2,"0");
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+function drawTree(root){
+  const box = $("tree");
+  let leaves = 0; (function c(n){ if(!n.l) leaves++; else {c(n.l);c(n.r);} })(root);
+  if (leaves > 40){ box.innerHTML = '<p class="note">This text has '+leaves+' different characters, too many to draw clearly. Try a shorter text.</p>'; return; }
+  const GAP = 44, DY = 62; let x = 0, maxD = 0, parts = [];
+  (function place(n,d){
+    maxD = Math.max(maxD,d); n.d = d;
+    if(!n.l){ n.x = 30 + (x++)*GAP; return; }
+    place(n.l,d+1); place(n.r,d+1); n.x = (n.l.x + n.r.x)/2;
+  })(root,0);
+  (function draw(n){
+    const y = 24 + n.d*DY;
+    if(!n.l){
+      parts.push('<rect x="'+(n.x-18)+'" y="'+(y-14)+'" width="36" height="42" rx="6" fill="none" stroke="var(--accent)"/>'+
+        '<text x="'+n.x+'" y="'+(y+1)+'" text-anchor="middle" font-size="13" font-weight="600">'+esc(label(n.s).split(" ")[0])+'</text>'+
+        '<text x="'+n.x+'" y="'+(y+18)+'" text-anchor="middle" font-size="11" style="fill:var(--muted)">'+n.f+'</text>');
+      return;
+    }
+    [[n.l,"0","--b0"],[n.r,"1","--b1"]].forEach(([c,bit,col])=>{
+      const cy = 24 + c.d*DY;
+      parts.unshift('<line x1="'+n.x+'" y1="'+(y+10)+'" x2="'+c.x+'" y2="'+(cy-14)+'" stroke="var('+col+')" stroke-width="2"/>'+
+        '<text x="'+((n.x+c.x)/2 + (bit==="0"?-9:9))+'" y="'+((y+cy)/2-4)+'" text-anchor="middle" font-size="12" font-weight="600" style="fill:var('+col+')">'+bit+'</text>');
+      draw(c);
+    });
+    parts.push('<circle cx="'+n.x+'" cy="'+y+'" r="11" style="fill:var(--accent)"/><text x="'+n.x+'" y="'+(y+4)+'" text-anchor="middle" font-size="10" style="fill:#fff">'+n.f+'</text>');
+  })(root);
+  const w = Math.max(leaves*GAP+20, 120), h = maxD*DY + 70;
+  box.innerHTML = '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Huffman tree">'+parts.join("")+'</svg>';
+}
+
+function run(){
+  const text = $("inp").value;
+  if (!text){ $("out").hidden = true; return; }
+  const data = new TextEncoder().encode(text);
+  const freq = frequencies(data), root = buildTree(freq), codes = makeCodes(root);
+
+  let bitLen = 0; for (const [s,f] of freq) bitLen += f * codes.get(s).length;
+  const orig = data.length;
+  const comp = 2 + 5*freq.size + 1 + Math.ceil(bitLen/8); // same file format as the Python project
+  const saved = (orig - comp) / orig * 100;
+  const avg = bitLen / orig;
+
+  $("stats").innerHTML =
+    [[orig+" B","Original size"],[comp+" B","Compressed size (with header)"],
+     [saved.toFixed(1)+"%","Space saved"],[avg.toFixed(2)+" bits","Average code length"],
+     [freq.size,"Different characters"]]
+    .map(([a,b]) => '<div class="stat"><b>'+a+'</b><span>'+b+'</span></div>').join("");
+  $("bar").style.width = Math.max(2, Math.min(100, comp/orig*100)) + "%";
+  $("barnote").textContent = comp > orig
+    ? "The compressed file is larger. Short texts do not repay the cost of storing the frequency table."
+    : "The bar shows the compressed size as a share of the original. The header is 3 + 5 × " + freq.size + " bytes.";
+
+  const rows = [...freq].sort((a,b) => b[1]-a[1] || a[0]-b[0]);
+  $("tbl").innerHTML = '<tr><th>Character</th><th>Frequency</th><th>Code</th><th>Code length</th></tr>' +
+    rows.map(([s,f]) => '<tr><td class="m">'+esc(label(s))+'</td><td>'+f+'</td><td class="m">'+codes.get(s)+'</td><td>'+codes.get(s).length+'</td></tr>').join("");
+
+  drawTree(root);
+
+  const SHOW = 120; let html = "", full = "";
+  data.forEach((b,i) => { const c = codes.get(b); full += c; if (i < SHOW) html += '<span class="'+(i%2?"b":"a")+'">'+c+'</span>'; });
+  $("bits").innerHTML = html;
+  $("bitsnote").textContent = "Each coloured block is one character. " + (orig > SHOW ? "Showing the first " + SHOW + " characters. " : "") + "Total: " + bitLen + " bits instead of " + orig*8 + ".";
+
+  const back = new TextDecoder().decode(decode(full, root, orig));
+  $("dec").innerHTML = back === text
+    ? '<span class="ok">Decoded text matches the original.</span> Huffman coding is lossless.'
+    : '<span class="bad">Decoded text does not match.</span>';
+  $("out").hidden = false;
+}
+
+$("go").onclick = run;
+$("sample").onclick = () => { $("inp").value = SAMPLE; run(); };
+$("file").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = () => { $("inp").value = r.result; run(); }; r.readAsText(f);
+};
+run();
+</script>
+</body>
+</html>
